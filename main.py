@@ -12,6 +12,24 @@ def build_default_response():
 
 post = Blueprint('post', __name__)
 
+
+class Button():
+    def __init__(self, title, payload=None, url=None, hide=False):
+        self.title = title
+        self.payload = payload
+        self.url = url
+        self.hide = hide
+    
+    def get_button_object(self):
+        answer = {'title': self.title, 'hide': self.hide}
+        if self.url is not None:
+            answer['url'] = self.url
+        if self.payload is not None:
+            answer['payload'] = self.payload
+        
+        return answer
+
+
 class AliceVariable():
     def __init__(self, name, value, skill):
         self.name = name
@@ -51,10 +69,11 @@ class AliceVariable():
 
     
 class Scene():
-    def __init__(self, name, skill, scenary):
+    def __init__(self, name, skill, scenary, buttons=[]):
         self.name = name
         self.scenary = scenary
         skill.add_scene(self)
+        self.buttons = [button.get_button_object() for button in buttons]
     
     def play(self, text, entities, dialog):
         variables = self.scenary.__code__.co_varnames[2:self.scenary.__code__.co_argcount]
@@ -63,7 +82,10 @@ class Scene():
         for variable in variables:
             new_var = dialog.variables[variable]
             result += [new_var]
-        return self.scenary(*result)
+        
+        response = self.scenary(*result)
+        response['buttons'] = self.buttons 
+        return response
 
 
 class Dialog():
@@ -91,6 +113,7 @@ class Dialog():
         entities = req['request']['nlu']['entities']
         data = self.current_scene.play(text, entities, self)
         self.response['response']['text'] = data['response_text']
+        self.response['response']['buttons'] = data['buttons']
         if data['next_scene'] == 'END':
             self.response['response']['end_session'] = True
             return
