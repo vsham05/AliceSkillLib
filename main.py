@@ -12,21 +12,57 @@ def build_default_response():
 
 post = Blueprint('post', __name__)
 
-
-class Scene():
-    def __init__(self, name, skill):
+class AliceVariable():
+    def __init__(self, name, value, skill):
         self.name = name
-        self.scenary = None
+        self.value = value
+        self.skill = skill
+        
+    def __iadd__(self, other):
+        self.skill.dialogs[self.skill.current_id].variables[self.name].value += other
+        return self
+    
+    def __isub__(self, other):
+        self.skill.dialogs[self.skill.current_id].variables[self.name].value -= other
+        return self
+    
+    def __imul__(self, other):
+        self.skill.dialogs[self.skill.current_id].variables[self.name].value *= other
+        return self
+    
+    def __ifloordiv__(self, other):
+        self.skill.dialogs[self.skill.current_id].variables[self.name].value //= other
+        return self
+
+    def __idiv__(self, other):
+        self.skill.dialogs[self.skill.current_id].variables[self.name].value /= other
+        return self
+    
+    def __ipow__(self, other):
+        self.skill.dialogs[self.skill.current_id].variables[self.name].value **= other
+        return self
+    
+    def __imod_(self, other):
+        self.skill.dialogs[self.skill.current_id].variables[self.name].value %= other
+        return self
+    
+    def __str__(self):
+        return self.value
+
+    
+class Scene():
+    def __init__(self, name, skill, scenary):
+        self.name = name
+        self.scenary = scenary
         skill.add_scene(self)
     
     def play(self, text, entities, dialog):
         variables = self.scenary.__code__.co_varnames[2:self.scenary.__code__.co_argcount]
-        print(variables)
+        print(dialog.variables)
         result = [text, entities]
         for variable in variables:
-            new_var = dialog.__dict__[variable]
+            new_var = dialog.variables[variable]
             result += [new_var]
-        print(result)
         return self.scenary(*result)
 
 
@@ -39,7 +75,7 @@ class Dialog():
         self.variables = variables
         for variable in variables:
             new_value = 'self.' + variable
-            exec("%s = %d" % (new_value,variables[variable]))
+            exec(f"{new_value} = AliceVariable(variables[variable].name, variables[variable].value, variables[variable].skill)")
         
         self.response = {
                         'session': request.json['session'],
@@ -55,7 +91,6 @@ class Dialog():
         entities = req['request']['nlu']['entities']
         data = self.current_scene.play(text, entities, self)
         self.response['response']['text'] = data['response_text']
-        print(data['response_text'])
         if data['next_scene'] == 'END':
             self.response['response']['end_session'] = True
             return
@@ -100,7 +135,14 @@ class AliceView(FlaskView):
         self.variables = {**self.variables, **variables}
         for variable in variables:
             new_value = 'self.' + variable
-            exec("%s = %d" % (new_value,variables[variable]))
+            self.variables[variable] = AliceVariable(variable, variables[variable], self)
+            exec(f"{new_value} = AliceVariable(variable, variables[variable], self)")
+        
+    
+    def synhronize(self, dialogs, user_id):
+        self.dialogs = dialogs
+        self.current_id = user_id
+    
         
 
 skill = AliceView()
@@ -118,6 +160,7 @@ def post():
     if request.method == "POST":
         req = request.json
         user_id = req['session']['user_id']
+        skill.synhronize(dialogs, user_id)
         if req['session']['new']:
             dialogs[user_id] = Dialog(user_id=user_id, variables=skill.variables, scenes=skill.scenes)
             dialogs[user_id].play_scene(req)
