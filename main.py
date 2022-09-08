@@ -6,28 +6,20 @@ import json
 import os
 from random import choice
 
+from button import Button
+from card import Photo, BigImage
+
+from exceptions import WrongSceneNumError
+
 def build_default_response():
-    return {'response_text': '', 'next_scene': '', 'photos': []}
-
-
-post = Blueprint('post', __name__)
-
-
-class Button():
-    def __init__(self, title, payload=None, url=None, hide=False):
-        self.title = title
-        self.payload = payload
-        self.url = url
-        self.hide = hide
-    
-    def get_button_object(self):
-        answer = {'title': self.title, 'hide': self.hide}
-        if self.url is not None:
-            answer['url'] = self.url
-        if self.payload is not None:
-            answer['payload'] = self.payload
-        
-        return answer
+    return {
+                        'session': request.json['session'],
+                        'version': request.json['version'],
+                        'response': {
+                        'end_session': False
+                                            },
+                        'next-scene': 'END'         
+                    }
 
 
 class AliceVariable():
@@ -112,14 +104,16 @@ class Dialog():
         text = req['request']['original_utterance']
         entities = req['request']['nlu']['entities']
         data = self.current_scene.play(text, entities, self)
-        self.response['response']['text'] = data['response_text']
-        self.response['response']['buttons'] = data['buttons']
+        self.response = data
         if data['next_scene'] == 'END':
             self.response['response']['end_session'] = True
             return
         for scene in self.scenes:
             if scene.name == data['next_scene']:
                 self.current_scene = scene
+                break
+        else:
+            raise WrongSceneNumError(data['next_scene'])
         
         return 
 
@@ -138,7 +132,6 @@ class AliceView(FlaskView):
         self.port = 5000
         self.app = Flask(__name__)
         print(self.app.url_map)
-        self.app.register_blueprint(post, url_prefix='/post')
         self.scenes = []
         self.start_scene = None
     
